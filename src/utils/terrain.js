@@ -122,8 +122,8 @@ export const getTerrainHeight = (x, z) => {
 
 // Biome determination
 export const getBiome = (x, z, height) => {
-    // Snowy peaks
-    if (height > 38) return 'snow';
+    // Snowy peaks - Lowered threshold for more snow
+    if (height > 30) return 'snow';
     
     // 1. Main Path Logic
     const distToMainPath = distanceToMainPath(x, z);
@@ -145,8 +145,8 @@ export const getBiome = (x, z, height) => {
     // Farm area (square)
     if (Math.abs(x - FARM_CENTER_X) < FARM_HALF - 2 && Math.abs(z - FARM_CENTER_Z) < FARM_HALF - 2) return 'farm_dirt';
 
-    // Mountains/Rocks
-    if (height > 25) return 'rock';
+    // Mountains/Rocks - Removed rock, replaced with snow/forest transition
+    // if (height > 25) return 'rock'; // Removed
     
     // Forest / Plains moisture noise
     const moisture = noise(x * 0.005 + 100, z * 0.005 + 100);

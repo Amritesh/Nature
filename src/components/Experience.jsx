@@ -9,6 +9,7 @@ import Dog from './Dog'
 import Farm from './Farm'
 import Grassland from './Grassland'
 import UI from './UI'
+import AudioController from './AudioController'
 
 function DayNightCycle() {
     const skyRef = useRef();
@@ -119,11 +120,6 @@ function GroundCameraFollow({ initialEyeHeight = 2.4, lerpFactor = 0.08, minHeig
 //     return null;
 // }
 
-// Handles global audio playback and caching (Three.js Audio)
-function AudioManager({ tracks }) {
-    // Audio temporarily disabled for crash/memory diagnostics
-    return null;
-}
 
 export default function Experience() {
     const controlsRef = useRef()
@@ -189,8 +185,9 @@ export default function Experience() {
               <Stars radius={80} depth={40} count={4000} factor={3} saturation={0} fade speed={0.8} />
              <NoRollCamera />
             <GroundCameraFollow initialEyeHeight={2.4} lerpFactor={0.08} />
-            <AudioManager tracks={['/audio/audio1.mp3', '/audio/audio2.mp3']} />
-            <AudioManager tracks={[ '/audio/audio1.mp3', '/audio/audio2.mp3' ]} />
+            <React.Suspense fallback={null}>
+                <AudioController tracks={['/audio/audio1.mp3', '/audio/audio2.mp3']} />
+            </React.Suspense>
                
                 <group position={[0, -5, 0]}>
                     <Terrain onTerrainClick={(e) => { e.stopPropagation(); handleTerrainClick(e.point) }} />

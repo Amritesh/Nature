@@ -92,9 +92,10 @@ export function Terrain({ onTerrainClick }) {
          receiveShadow
          onClick={onTerrainClick}
        >
-         <meshToonMaterial
+         <meshStandardMaterial
              vertexColors
-             flatShading
+             roughness={0.8}
+             metalness={0.1}
          />
        </mesh>
       
