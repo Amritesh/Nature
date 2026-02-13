@@ -27,7 +27,10 @@ const Sheep = ({ position, velocity, id, flock, dogs }) => {
       wanderOffset: randomRange(0, 100),
       strayForce: randomRange(0.05, 0.1),
       bravery: Math.random(), // Some sheep are more easily scared
-      color: new THREE.Color("#ffffff") // Pure white
+      color: new THREE.Color("#ffffff"), // Pure white
+      faceColor: new THREE.Color("#ffdab9"), // Peach/Skin tone for face
+      eyeColor: new THREE.Color("#000000"),
+      noseColor: new THREE.Color("#ffb6c1") // Pink nose
   }), []);
 
   // Use refs for mutable state to avoid re-renders
@@ -379,41 +382,35 @@ const Sheep = ({ position, velocity, id, flock, dogs }) => {
     // --- ANIMATION / CHARACTER ---
     
     // Head Animation
-    const head = meshRef.current.children[1]; // Head is index 1
+    const head = meshRef.current.children.find(child => child.name === 'head'); // Find by name
     if (head) {
         if (feeding.current) {
             // Grazing: Head down, maybe bobbing slightly
             headBobTimer.current += delta * 10;
-            head.position.y = 1.8 + Math.sin(headBobTimer.current) * 0.1;
-            head.rotation.x = Math.PI / 4; 
+            head.position.y = 1.6 + Math.sin(headBobTimer.current) * 0.05;
+            head.rotation.x = Math.PI / 3; 
         } else {
             // Walking/Idle: Head up
-            head.position.y = 2.5;
+            head.position.y = 2.0;
             head.rotation.x = 0;
-            
-            // Maybe look around occasionally?
-            // (Simple version: just keep forward for now to avoid weird snapping)
         }
     }
     
     // Leg Animation (Simple sine wave based on speed)
     const legSpeed = speed * 20; // Animation speed based on movement speed
-    const legAmp = 0.2;
+    const legAmp = 0.3;
     if (speed > 0.1) {
         // Legs are indices 2, 3, 4, 5
-        const leg1 = meshRef.current.children[2];
-        const leg2 = meshRef.current.children[3];
-        const leg3 = meshRef.current.children[4];
-        const leg4 = meshRef.current.children[5];
+        const legs = meshRef.current.children.filter(child => child.name && child.name.startsWith('leg'));
         
-        if (leg1 && leg2 && leg3 && leg4) {
-             const t = state.clock.elapsedTime * 8; // Global time for sync
+        if (legs.length === 4) {
+             const t = state.clock.elapsedTime * 12; // Global time for sync
              // Diagonal pairs move together
-             leg1.rotation.x = Math.sin(t) * legAmp;
-             leg4.rotation.x = Math.sin(t) * legAmp;
+             legs[0].rotation.x = Math.sin(t) * legAmp;
+             legs[3].rotation.x = Math.sin(t) * legAmp;
              
-             leg2.rotation.x = Math.cos(t) * legAmp;
-             leg3.rotation.x = Math.cos(t) * legAmp;
+             legs[1].rotation.x = Math.cos(t) * legAmp;
+             legs[2].rotation.x = Math.cos(t) * legAmp;
         }
     }
 
@@ -421,44 +418,84 @@ const Sheep = ({ position, velocity, id, flock, dogs }) => {
 
   return (
     <group ref={meshRef} position={position}>
-      {/* Body: Main Wool - White */}
-      <mesh castShadow receiveShadow position={[0, 1.1, 0]}>
-        <boxGeometry args={[1.4, 1.2, 2.0]} />
-        {/* Simple Toon Material - emmisive to force brightness if needed, but color should be enough with high ambient */}
+      {/* Body: Main Wool - White fluffy sphere-like box */}
+      <mesh castShadow receiveShadow position={[0, 1.1, 0]} name="body">
+        <boxGeometry args={[1.5, 1.3, 2.2]} />
         <meshToonMaterial color={personality.color} />
       </mesh>
       
-      {/* Head: Black face */}
-      <mesh castShadow receiveShadow position={[0, 1.8, 1.1]}>
-        <boxGeometry args={[0.7, 0.7, 0.8]} />
-        <meshToonMaterial color="#fff" />
-      </mesh>
+      {/* Head Group */}
+      <group position={[0, 2.0, 1.3]} name="head">
+          {/* Main Head Shape */}
+          <mesh castShadow receiveShadow>
+            <boxGeometry args={[0.9, 0.9, 0.8]} />
+            <meshToonMaterial color={personality.faceColor} />
+          </mesh>
+          
+          {/* Wool on top of head */}
+          <mesh position={[0, 0.5, -0.1]}>
+              <boxGeometry args={[1.0, 0.4, 0.7]} />
+              <meshToonMaterial color={personality.color} />
+          </mesh>
+
+          {/* Eyes - Bigger and cuter - pushed further out */}
+          <mesh position={[-0.25, 0.1, 0.45]}>
+              <sphereGeometry args={[0.12, 16, 16]} />
+              <meshStandardMaterial color="black" roughness={0.1} metalness={0.8} />
+          </mesh>
+          <mesh position={[0.25, 0.1, 0.45]}>
+              <sphereGeometry args={[0.12, 16, 16]} />
+              <meshStandardMaterial color="black" roughness={0.1} metalness={0.8} />
+          </mesh>
+          
+          {/* Cute Pink Nose/Snout - pushed further out */}
+          <mesh position={[0, -0.15, 0.48]}>
+               <boxGeometry args={[0.25, 0.15, 0.1]} />
+               <meshToonMaterial color={personality.noseColor} />
+          </mesh>
+
+          {/* Smile - Using a torus segment - pushed further out and thicker */}
+          <mesh position={[0, -0.25, 0.45]} rotation={[0, 0, Math.PI]}>
+             <torusGeometry args={[0.12, 0.03, 8, 16, Math.PI]} />
+             <meshBasicMaterial color="#333" />
+          </mesh>
+
+          {/* Ears - Floppy? */}
+          <mesh position={[-0.55, 0.1, 0]} rotation={[0, 0, -0.3]}>
+              <boxGeometry args={[0.2, 0.5, 0.3]} />
+              <meshToonMaterial color={personality.faceColor} />
+          </mesh>
+          <mesh position={[0.55, 0.1, 0]} rotation={[0, 0, 0.3]}>
+              <boxGeometry args={[0.2, 0.5, 0.3]} />
+              <meshToonMaterial color={personality.faceColor} />
+          </mesh>
+      </group>
       
-      {/* Legs - Black */}
+      {/* Legs - Black/Dark Grey */}
       {/* Front Left */}
-      <mesh position={[-0.4, 0.5, 0.8]}>
-        <boxGeometry args={[0.15, 1.0, 0.15]} />
-        <meshToonMaterial color="#fff" />
+      <mesh position={[-0.4, 0.5, 0.8]} name="leg_fl">
+        <boxGeometry args={[0.2, 1.0, 0.2]} />
+        <meshToonMaterial color="#333" />
       </mesh>
       {/* Front Right */}
-      <mesh position={[0.4, 0.5, 0.8]}>
-        <boxGeometry args={[0.15, 1.0, 0.15]} />
-        <meshToonMaterial color="#fff" />
+      <mesh position={[0.4, 0.5, 0.8]} name="leg_fr">
+        <boxGeometry args={[0.2, 1.0, 0.2]} />
+        <meshToonMaterial color="#333" />
       </mesh>
       {/* Back Left */}
-      <mesh position={[-0.4, 0.5, -0.8]}>
-        <boxGeometry args={[0.15, 1.0, 0.15]} />
-        <meshToonMaterial color="#fff" />
+      <mesh position={[-0.4, 0.5, -0.8]} name="leg_bl">
+        <boxGeometry args={[0.2, 1.0, 0.2]} />
+        <meshToonMaterial color="#333" />
       </mesh>
       {/* Back Right */}
-      <mesh position={[0.4, 0.5, -0.8]}>
-        <boxGeometry args={[0.15, 1.0, 0.15]} />
-        <meshToonMaterial color="#fff" />
+      <mesh position={[0.4, 0.5, -0.8]} name="leg_br">
+        <boxGeometry args={[0.2, 1.0, 0.2]} />
+        <meshToonMaterial color="#333" />
       </mesh>
       
       {/* Tail - Small wool puff */}
-      <mesh position={[0, 1.2, -1.1]} rotation={[0.2, 0, 0]}>
-        <boxGeometry args={[0.3, 0.3, 0.3]} />
+      <mesh position={[0, 1.2, -1.2]} rotation={[0.5, 0, 0]} name="tail">
+        <sphereGeometry args={[0.25, 8, 8]} />
         <meshToonMaterial color={personality.color} />
       </mesh>
 
