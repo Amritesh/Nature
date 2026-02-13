@@ -1,6 +1,6 @@
 import React, { useRef, useState, useCallback, useMemo, useEffect } from 'react'
 import * as THREE from 'three'
-import { OrbitControls, Sky, Stars, Environment, FlyControls } from '@react-three/drei'
+import { OrbitControls, Sky, Stars, Environment, FlyControls, Sparkles, Cloud } from '@react-three/drei'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Terrain } from './Terrain'
 import { getTerrainHeight } from '../utils/terrain'
@@ -182,11 +182,13 @@ export default function Experience() {
          <UI sheepCount={sheepCount} totalSheep={TOTAL_SHEEP} />
          <Canvas shadows camera={{ position: [-200, 80, 50], fov: 65 }} dpr={[1, 1.5]}> {/* Adjust camera to see new farm location */}
              <DayNightCycle />
-              <Stars radius={80} depth={40} count={4000} factor={3} saturation={0} fade speed={0.8} />
+             <fog attach="fog" args={['#e0f7fa', 150, 650]} />
+              <Stars radius={80} depth={40} count={5000} factor={4} saturation={0} fade speed={1} />
+              <Sparkles count={500} scale={[400, 100, 400]} size={6} speed={0.4} opacity={0.6} color="#b3e5fc" position={[0, 20, 0]} />
              <NoRollCamera />
             <GroundCameraFollow initialEyeHeight={2.4} lerpFactor={0.08} />
             <React.Suspense fallback={null}>
-                <AudioController tracks={['/audio/audio1.mp3', '/audio/audio2.mp3']} />
+                <AudioController tracks={['./audio/audio1.mp3', './audio/audio2.mp3']} />
             </React.Suspense>
                
                 <group position={[0, -5, 0]}>
