@@ -56,7 +56,7 @@ export function Terrain({ onTerrainClick }) {
       const y = getTerrainHeight(x, z);
       const biome = getBiome(x, z, y);
 
-      if (biome === 'forest') {
+      if (biome === 'snow_forest') {
         const scaleVal = 0.7 + Math.random() * 1.0;
         const sway = (Math.random() - 0.5) * 0.35;
 
@@ -66,7 +66,7 @@ export function Terrain({ onTerrainClick }) {
         tempMatrix.compose(tempPosition, new THREE.Quaternion().setFromEuler(new THREE.Euler(0, sway, 0)), tempScale);
         trunks.push(tempMatrix.clone());
 
-        // Foliage
+        // Foliage (Main Cone)
         tempPosition.set(x, y + scaleVal * 3.5, z);
         tempScale.set(scaleVal, scaleVal, scaleVal);
         tempMatrix.compose(tempPosition, new THREE.Quaternion().setFromEuler(new THREE.Euler(0, sway, 0)), tempScale);
@@ -101,15 +101,15 @@ export function Terrain({ onTerrainClick }) {
       
        {/* Optimized Trees using Instances */}
        <Instances ref={trunkMeshRef} range={treeMatrices.trunks.length}>
-            {/* Simple Box Trunk with light sway */}
+            {/* Simple Box Trunk */}
             <boxGeometry args={[0.6, 2, 0.6]} />
-            <meshToonMaterial color="#6b4a2b" />
+            <meshToonMaterial color="#4a3b2a" />
        </Instances>
 
        <Instances ref={foliageMeshRef} range={treeMatrices.foliages.length}>
-            {/* Cone Foliage with slight hue variation */}
+            {/* Snow-laden Pine Foliage - White/Green mix */}
             <coneGeometry args={[2.5, 6, 8]} />
-            <meshToonMaterial color="#3ba949" />
+            <meshStandardMaterial color="#eef" roughness={0.9} />
        </Instances>
     </group>
   );

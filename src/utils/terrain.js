@@ -150,18 +150,21 @@ export const getBiome = (x, z, height) => {
     
     // Forest / Plains moisture noise
     const moisture = noise(x * 0.005 + 100, z * 0.005 + 100);
-    if (moisture > 0.15) return 'forest';
+    if (moisture > 0.3) return 'snow_forest';
+    if (moisture < -0.2) return 'plains'; // Patches of green plains
     
-    return 'plains';
+    return 'snow_plains';
 }
 
 // Toon-style Palette
 export const BIOME_COLORS = {
     lush_grass: new THREE.Color('#76d275'), // Lighter vibrant green
-    plains: new THREE.Color('#aed581'), // Very light green
+    plains: new THREE.Color('#9ccc65'), // Light green plain
     forest: new THREE.Color('#558b2f'), // Medium green
     rock: new THREE.Color('#8d6e63'), // Lighter brown
     snow: new THREE.Color('#ffffff'), // White snow
     path: new THREE.Color('#a67c52'), // Warmer path
     farm_dirt: new THREE.Color('#8d6e63'), // Dirt
+    snow_forest: new THREE.Color('#e0f7fa'), // Icy white blue for forest floor
+    snow_plains: new THREE.Color('#f0f8ff'), // Alice blue for plains
 };
