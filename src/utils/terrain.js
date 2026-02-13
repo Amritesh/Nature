@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { fbm, noise, clamp } from './math';
+import { fbm, noise, clamp, smoothstep } from './math';
 
 // Shared farm bounds
 export const FARM_CENTER_X = -200; // Shift farm closer to center
@@ -56,13 +56,16 @@ export const getGrassRadiusAt = (x, z) => {
 
 export const getTerrainHeight = (x, z) => {
     // Large scale features (mountains/valleys)
-    const scale1 = 0.003;
-    // Reduced octaves for performance in loop
-    let y = fbm(x * scale1, z * scale1, 4) * MAX_HEIGHT;
+    const scale1 = 0.002; // Slightly larger features
+    // Use power for more realistic "pointy peaks but flat valleys" look
+    let rawNoise = fbm(x * scale1, z * scale1, 5);
+    // Ridge-like mountains: 1 - abs(noise)
+    let y = Math.pow(Math.abs(rawNoise), 1.2) * MAX_HEIGHT;
 
-    // Add some roughness
+    // Add some roughness, but scale it with height so valleys are smoother
     const scale2 = 0.02;
-    y += noise(x * scale2, z * scale2) * 3;
+    const roughness = noise(x * scale2, z * scale2) * 2;
+    y += roughness * clamp(y / 10, 0.2, 1.0);
 
     // Flatten specific areas for Farm and Grassland
     // Farm area (square flatten) to align farm floor and fences
@@ -101,9 +104,16 @@ export const getTerrainHeight = (x, z) => {
     // 1. Main Path (From farm entrance towards grassland, slightly curved)
     const distToFarmPath = distanceToMainPath(x, z);
     if (distToFarmPath < PATH_WIDTH) {
-        const t = clamp(distToFarmPath / PATH_WIDTH, 0, 1);
-        const pathHeight = FARM_HEIGHT + noise(x * 0.1, z * 0.1) * 0.5; // Slight texture
-        y = y * t + pathHeight * (1 - t); // Flatten and set to farm height with slight variation
+        // Use a smoother step for the path blending to avoid "V" shape
+        const t = smoothstep(distToFarmPath, 0, PATH_WIDTH);
+        
+        // Calculate target path height based on interpolation between farm and grassland heights
+        // This makes the path a ramp rather than sticking to FARM_HEIGHT everywhere
+        const progressAlongPath = clamp(_pathToPoint.dot(PATH_DIRECTION) / PATH_LENGTH, 0, 1);
+        const targetPathHeight = FARM_HEIGHT + (20 - FARM_HEIGHT) * progressAlongPath;
+        
+        const pathTexture = noise(x * 0.1, z * 0.1) * 0.3;
+        y = y * t + (targetPathHeight + pathTexture) * (1 - t);
     }
 
     // 2. Forking Path (Existing one, adjusted slightly)
@@ -112,8 +122,10 @@ export const getTerrainHeight = (x, z) => {
          // Approximate line z = -x + 50 (shifted)
          const distToForkPath = Math.abs(x + z - 50 + forkPathNoise) / Math.sqrt(2);
          if (distToForkPath < 10) {
-             const t = Math.min(1, distToForkPath / 10);
-             y = y * t + (y * 0.95) * (1 - t);
+             const t = smoothstep(distToForkPath, 0, 10);
+             // Make the fork path also follow the natural terrain but flattened slightly towards a local average
+             const forkTargetH = y * 0.8;
+             y = y * t + forkTargetH * (1 - t);
          }
     }
 

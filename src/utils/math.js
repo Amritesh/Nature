@@ -36,3 +36,8 @@ export const randomRange = (min, max) => {
 export const clamp = (value, min, max) => {
     return Math.max(min, Math.min(max, value));
 }
+
+export const smoothstep = (x, edge0, edge1) => {
+  const t = clamp((x - edge0) / (edge1 - edge0), 0, 1);
+  return t * t * (3 - 2 * t);
+}
