@@ -376,8 +376,10 @@ const Sheep = ({ position, velocity, id, flock, dogs }) => {
     }
 
     // Update shared state
-    flock[id].position.copy(pos.current);
-    flock[id].velocity.copy(vel.current);
+    if (flock[id]) {
+        flock[id].position.copy(pos.current);
+        flock[id].velocity.copy(vel.current);
+    }
 
     // --- ANIMATION / CHARACTER ---
     

@@ -1,9 +1,9 @@
 import React, { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { getTerrainHeight, getBiome, FARM_CORNER_OPEN, GRASS_CENTER_X, GRASS_CENTER_Z, GRASS_RADIUS_EST, getGrassRadiusAt } from '../utils/terrain';
+import { getTerrainHeight, getBiome, FARM_CORNER_OPEN, GRASS_CENTER_X, GRASS_CENTER_Z, GRASS_RADIUS_EST, getGrassRadiusAt, FARM_CENTER_X, FARM_CENTER_Z, FARM_HALF, FARM_GATE_HALF, FARM_HEIGHT } from '../utils/terrain';
+import Sheep from './Sheep';
 import { randomRange, clamp, fbm } from '../utils/math';
-import { Instances, Instance } from '@react-three/drei';
 
 // Constants for flocking behavior
 const SEPARATION_DISTANCE = 4.5; // give more personal space to reduce bumping
@@ -20,14 +20,12 @@ const MAX_FLEE_SPEED_BOOST = 4.2; // faster when fleeing dogs
 const MAX_FLEE_FORCE_BOOST = 7.4;
 const BOUNDS_X = 350; // half of TERRAIN_SIZE_X
 const BOUNDS_Z = 700; // half of TERRAIN_SIZE_Z
-// Farm collision bounds (matches Farm size/gate in Experience/Farm)
-import { FARM_CENTER_X, FARM_CENTER_Z, FARM_HALF, FARM_HEIGHT, FARM_GATE_HALF } from '../utils/terrain';
 
 const FARM_CENTER = new THREE.Vector3(FARM_CENTER_X, 0, FARM_CENTER_Z);
 const GATE_HALF = FARM_GATE_HALF; // gateWidth / 2
 const GATE_Z = FARM_CENTER.z + FARM_HALF; // front fence z
 
-// Reusable vectors to avoid GC
+// Reusable vectors/objects to avoid GC
 const _pos = new THREE.Vector3();
 const _vel = new THREE.Vector3();
 const _acc = new THREE.Vector3();
@@ -41,11 +39,19 @@ const _color = new THREE.Color();
 const _tmp = new THREE.Vector3();
 const _tmp2 = new THREE.Vector3();
 const _grazeTarget = new THREE.Vector3();
+const _bodyQuat = new THREE.Quaternion();
+const _headAnimQuat = new THREE.Quaternion();
+const _rotationQuat = new THREE.Quaternion();
 
 const Herd = ({ count = 150, dogs, onSheepUpdate, onHerdCenterUpdate, onStrayUpdate }) => {
   // Refs for InstancedMeshes
   const bodyMeshRef = useRef();
-  const headMeshRef = useRef();
+  const headMainMeshRef = useRef();
+  const headWoolMeshRef = useRef();
+  const eyesMeshRef = useRef();
+  const noseMeshRef = useRef();
+  const smileMeshRef = useRef();
+  const earsMeshRef = useRef();
   const legMeshRef = useRef();
   const tailMeshRef = useRef();
   
@@ -72,8 +78,11 @@ const Herd = ({ count = 150, dogs, onSheepUpdate, onHerdCenterUpdate, onStrayUpd
         bravery: Math.random(),
         grazeAngle: Math.random() * Math.PI * 2,
         grazeRadiusFactor: randomRange(0.45, 0.95),
-        // Soft pastel wool tint for cuteness
-        color: new THREE.Color().setHSL(randomRange(0.08, 0.14), 0.22, randomRange(0.90, 0.96))
+        // Pure white wool for all sheep
+        color: new THREE.Color("#ffffff"),
+        faceColor: new THREE.Color("#ffdab9"),
+        eyeColor: new THREE.Color("#000000"),
+        noseColor: new THREE.Color("#ffb6c1")
       },
       state: {
         confidence: 1.0,
@@ -127,8 +136,8 @@ const Herd = ({ count = 150, dogs, onSheepUpdate, onHerdCenterUpdate, onStrayUpd
   };
 
   useFrame((state, delta) => {
-    if (!bodyMeshRef.current || !headMeshRef.current || !legMeshRef.current || !tailMeshRef.current) return;
-    // Guard against disappearing due to NaNs
+    if (!bodyMeshRef.current || !headMainMeshRef.current || !headWoolMeshRef.current || !eyesMeshRef.current || !noseMeshRef.current || !smileMeshRef.current || !earsMeshRef.current || !legMeshRef.current || !tailMeshRef.current) return;
+    // Guard against disappearing due to NaNs (check any ref)
     if (!Number.isFinite(bodyMeshRef.current.position.x)) return;
 
     // 1. Update Grid
@@ -367,52 +376,144 @@ const Herd = ({ count = 150, dogs, onSheepUpdate, onHerdCenterUpdate, onStrayUpd
 
       // --- RENDER UPDATES FOR INSTANCES ---
       
+      // Calculate body orientation
+      _dummy.position.set(0,0,0);
+      _dummy.quaternion.set(0,0,0,1);
+      if (speed > 0.1) {
+          _tmp.copy(_pos).add(_vel);
+          _dummy.position.copy(_pos);
+          _dummy.lookAt(_tmp);
+          _dummy.position.set(0,0,0);
+      }
+
+      _bodyQuat.copy(_dummy.quaternion);
+
       // 1. Body
       _dummy.position.copy(_pos);
-      _dummy.position.y += 0.8; // Centered body height
-      
-      if (speed > 0.1) {
-          const targetLook = _pos.clone().add(_vel);
-          _dummy.lookAt(targetLook);
-      }
-      
+      _dummy.position.y += 1.1;
       _dummy.updateMatrix();
       bodyMeshRef.current.setMatrixAt(i, _dummy.matrix);
       bodyMeshRef.current.setColorAt(i, sheep.personality.color);
 
-      // Head (offset forward/up, inherits rotation)
+      // 2. Head Group
       _headDummy.position.copy(_pos);
-      _headDummy.quaternion.copy(_dummy.quaternion);
-      _tmp.set(0, 0.9, 1.05).applyQuaternion(_dummy.quaternion);
-      _headDummy.position.add(_tmp);
-      _headDummy.updateMatrix();
-      headMeshRef.current.setMatrixAt(i, _headDummy.matrix);
-      headMeshRef.current.setColorAt(i, sheep.personality.color);
+      _headDummy.quaternion.copy(_bodyQuat);
+      
+      // Animation: Head Bobbing
+      let headY = 2.0;
+      let headRotX = 0;
+      if (sheep.state.feeding) {
+          sheep.state.headBobTimer += delta * 10;
+          headY = 1.6 + Math.sin(sheep.state.headBobTimer) * 0.05;
+          headRotX = Math.PI / 3;
+      }
 
-      // Tail (offset back/up)
-      _headDummy.position.copy(_pos);
-      _headDummy.quaternion.copy(_dummy.quaternion);
-      _tmp.set(0, 0.6, -1.1).applyQuaternion(_dummy.quaternion);
+      _tmp.set(0, headY, 1.3).applyQuaternion(_bodyQuat);
       _headDummy.position.add(_tmp);
+      
+      if (headRotX !== 0) {
+          _headAnimQuat.setFromAxisAngle(_tmp2.set(1, 0, 0), headRotX);
+          _headDummy.quaternion.multiply(_headAnimQuat);
+      }
       _headDummy.updateMatrix();
-      tailMeshRef.current.setMatrixAt(i, _headDummy.matrix);
+
+      const headPos = _headDummy.position;
+      const headQuat = _headDummy.quaternion;
+
+      // Head Main
+      _dummy.position.copy(headPos);
+      _dummy.quaternion.copy(headQuat);
+      _dummy.updateMatrix();
+      headMainMeshRef.current.setMatrixAt(i, _dummy.matrix);
+      headMainMeshRef.current.setColorAt(i, sheep.personality.faceColor);
+
+      // Head Wool
+      _tmp.set(0, 0.5, -0.1).applyQuaternion(headQuat);
+      _dummy.position.copy(headPos).add(_tmp);
+      _dummy.quaternion.copy(headQuat);
+      _dummy.updateMatrix();
+      headWoolMeshRef.current.setMatrixAt(i, _dummy.matrix);
+      headWoolMeshRef.current.setColorAt(i, sheep.personality.color);
+
+      // Eyes
+      _tmp.set(-0.25, 0.1, 0.45).applyQuaternion(headQuat);
+      _dummy.position.copy(headPos).add(_tmp);
+      _dummy.quaternion.copy(headQuat);
+      _dummy.updateMatrix();
+      eyesMeshRef.current.setMatrixAt(i * 2, _dummy.matrix);
+
+      _tmp.set(0.25, 0.1, 0.45).applyQuaternion(headQuat);
+      _dummy.position.copy(headPos).add(_tmp);
+      _dummy.quaternion.copy(headQuat);
+      _dummy.updateMatrix();
+      eyesMeshRef.current.setMatrixAt(i * 2 + 1, _dummy.matrix);
+
+      // Nose
+      _tmp.set(0, -0.15, 0.48).applyQuaternion(headQuat);
+      _dummy.position.copy(headPos).add(_tmp);
+      _dummy.quaternion.copy(headQuat);
+      _dummy.updateMatrix();
+      noseMeshRef.current.setMatrixAt(i, _dummy.matrix);
+      noseMeshRef.current.setColorAt(i, sheep.personality.noseColor);
+
+      // Smile
+      _tmp.set(0, -0.25, 0.45).applyQuaternion(headQuat);
+      _dummy.position.copy(headPos).add(_tmp);
+      _rotationQuat.setFromEuler(new THREE.Euler(0, 0, Math.PI)); // Small GC but Euler usage is clearer here
+      _dummy.quaternion.multiplyQuaternions(headQuat, _rotationQuat);
+      _dummy.updateMatrix();
+      smileMeshRef.current.setMatrixAt(i, _dummy.matrix);
+
+      // Ears
+      _tmp.set(-0.55, 0.1, 0).applyQuaternion(headQuat);
+      _dummy.position.copy(headPos).add(_tmp);
+      _rotationQuat.setFromEuler(new THREE.Euler(0, 0, -0.3));
+      _dummy.quaternion.multiplyQuaternions(headQuat, _rotationQuat);
+      _dummy.updateMatrix();
+      earsMeshRef.current.setMatrixAt(i * 2, _dummy.matrix);
+      earsMeshRef.current.setColorAt(i * 2, sheep.personality.faceColor);
+
+      _tmp.set(0.55, 0.1, 0).applyQuaternion(headQuat);
+      _dummy.position.copy(headPos).add(_tmp);
+      _rotationQuat.setFromEuler(new THREE.Euler(0, 0, 0.3));
+      _dummy.quaternion.multiplyQuaternions(headQuat, _rotationQuat);
+      _dummy.updateMatrix();
+      earsMeshRef.current.setMatrixAt(i * 2 + 1, _dummy.matrix);
+      earsMeshRef.current.setColorAt(i * 2 + 1, sheep.personality.faceColor);
+
+      // Tail
+      _tmp.set(0, 1.2, -1.2).applyQuaternion(_bodyQuat);
+      _dummy.position.copy(_pos).add(_tmp);
+      _rotationQuat.setFromEuler(new THREE.Euler(0.5, 0, 0));
+      _dummy.quaternion.multiplyQuaternions(_bodyQuat, _rotationQuat);
+      _dummy.updateMatrix();
+      tailMeshRef.current.setMatrixAt(i, _dummy.matrix);
       tailMeshRef.current.setColorAt(i, sheep.personality.color);
 
-      // Legs: four positions relative to body
+      // Legs
       const legOffsets = [
-        new THREE.Vector3(-0.45, -0.1, 0.75),
-        new THREE.Vector3(0.45, -0.1, 0.75),
-        new THREE.Vector3(-0.45, -0.1, -0.75),
-        new THREE.Vector3(0.45, -0.1, -0.75),
+        new THREE.Vector3(-0.4, 0.5, 0.8),
+        new THREE.Vector3(0.4, 0.5, 0.8),
+        new THREE.Vector3(-0.4, 0.5, -0.8),
+        new THREE.Vector3(0.4, 0.5, -0.8),
       ];
+      const legAmp = 0.3;
+      const t = time * 12;
+
       legOffsets.forEach((off, legIdx) => {
-        _legDummy.position.copy(_pos);
-        _legDummy.quaternion.copy(_dummy.quaternion);
-        _tmp2.copy(off).applyQuaternion(_dummy.quaternion);
-        _legDummy.position.add(_tmp2);
+        _tmp.copy(off).applyQuaternion(_bodyQuat);
+        _legDummy.position.copy(_pos).add(_tmp);
+        _legDummy.quaternion.copy(_bodyQuat);
+
+        if (speed > 0.1) {
+          let legRotX = (legIdx === 0 || legIdx === 3) ? Math.sin(t) * legAmp : Math.cos(t) * legAmp;
+          _rotationQuat.setFromAxisAngle(_tmp2.set(1,0,0), legRotX);
+          _legDummy.quaternion.multiply(_rotationQuat);
+        }
+
         _legDummy.updateMatrix();
         legMeshRef.current.setMatrixAt(i * 4 + legIdx, _legDummy.matrix);
-        legMeshRef.current.setColorAt(i * 4 + legIdx, sheep.personality.color);
+        legMeshRef.current.setColorAt(i * 4 + legIdx, new THREE.Color("#333"));
       });
 
 
@@ -427,13 +528,14 @@ const Herd = ({ count = 150, dogs, onSheepUpdate, onHerdCenterUpdate, onStrayUpd
     }
 
     bodyMeshRef.current.instanceMatrix.needsUpdate = true;
-  if (bodyMeshRef.current.instanceColor) bodyMeshRef.current.instanceColor.needsUpdate = true;
-    headMeshRef.current.instanceMatrix.needsUpdate = true;
-    if (headMeshRef.current.instanceColor) headMeshRef.current.instanceColor.needsUpdate = true;
-    tailMeshRef.current.instanceMatrix.needsUpdate = true;
-    if (tailMeshRef.current.instanceColor) tailMeshRef.current.instanceColor.needsUpdate = true;
+    headMainMeshRef.current.instanceMatrix.needsUpdate = true;
+    headWoolMeshRef.current.instanceMatrix.needsUpdate = true;
+    eyesMeshRef.current.instanceMatrix.needsUpdate = true;
+    noseMeshRef.current.instanceMatrix.needsUpdate = true;
+    smileMeshRef.current.instanceMatrix.needsUpdate = true;
+    earsMeshRef.current.instanceMatrix.needsUpdate = true;
     legMeshRef.current.instanceMatrix.needsUpdate = true;
-    if (legMeshRef.current.instanceColor) legMeshRef.current.instanceColor.needsUpdate = true;
+    tailMeshRef.current.instanceMatrix.needsUpdate = true;
 
     if (onSheepUpdate) onSheepUpdate(inGrasslandCount);
     if (activeSheep > 0 && onHerdCenterUpdate) {
@@ -451,24 +553,50 @@ const Herd = ({ count = 150, dogs, onSheepUpdate, onHerdCenterUpdate, onStrayUpd
     <group>
       {/* Simple Blocky Sheep */}
       <instancedMesh ref={bodyMeshRef} args={[null, null, count]} castShadow receiveShadow frustumCulled={false}>
-        <boxGeometry args={[1.5, 1.2, 2.1]} />
-        <meshStandardMaterial vertexColors roughness={0.35} metalness={0.0} envMapIntensity={0.25} emissive="#fbeee1" emissiveIntensity={0.12} />
+        <boxGeometry args={[1.5, 1.3, 2.2]} />
+        <meshStandardMaterial vertexColors color="#ffffff" emissive="#ffffff" emissiveIntensity={0.2} />
       </instancedMesh>
 
-      <instancedMesh ref={headMeshRef} args={[null, null, count]} castShadow receiveShadow frustumCulled={false}>
-        <boxGeometry args={[0.9, 0.8, 0.8]} />
-        <meshStandardMaterial vertexColors roughness={0.3} metalness={0.0} emissive="#f5e6d3" emissiveIntensity={0.12} />
+      {/* Head Group Parts */}
+      <instancedMesh ref={headMainMeshRef} args={[null, null, count]} castShadow receiveShadow frustumCulled={false}>
+          <boxGeometry args={[0.9, 0.9, 0.8]} />
+          <meshStandardMaterial vertexColors color="#ffdab9" emissive="#ffdab9" emissiveIntensity={0.1} />
       </instancedMesh>
 
+      <instancedMesh ref={headWoolMeshRef} args={[null, null, count]} castShadow receiveShadow frustumCulled={false}>
+          <boxGeometry args={[1.0, 0.4, 0.7]} />
+          <meshStandardMaterial vertexColors color="#ffffff" emissive="#ffffff" emissiveIntensity={0.2} />
+      </instancedMesh>
+
+      <instancedMesh ref={eyesMeshRef} args={[null, null, count * 2]} castShadow receiveShadow frustumCulled={false}>
+          <sphereGeometry args={[0.12, 16, 16]} />
+          <meshStandardMaterial color="black" roughness={0.1} metalness={0.8} />
+      </instancedMesh>
+
+      <instancedMesh ref={noseMeshRef} args={[null, null, count]} castShadow receiveShadow frustumCulled={false}>
+          <boxGeometry args={[0.25, 0.15, 0.1]} />
+          <meshStandardMaterial vertexColors color="#ffb6c1" />
+      </instancedMesh>
+
+      <instancedMesh ref={smileMeshRef} args={[null, null, count]} castShadow receiveShadow frustumCulled={false}>
+          <torusGeometry args={[0.12, 0.03, 8, 16, Math.PI]} />
+          <meshBasicMaterial color="#333" />
+      </instancedMesh>
+
+      <instancedMesh ref={earsMeshRef} args={[null, null, count * 2]} castShadow receiveShadow frustumCulled={false}>
+          <boxGeometry args={[0.2, 0.5, 0.3]} />
+          <meshStandardMaterial vertexColors color="#ffdab9" />
+      </instancedMesh>
+      
       {/* Legs share one instanced mesh, 4 per sheep */}
       <instancedMesh ref={legMeshRef} args={[null, null, count * 4]} castShadow receiveShadow frustumCulled={false}>
-        <boxGeometry args={[0.18, 0.9, 0.18]} />
-        <meshStandardMaterial vertexColors roughness={0.45} metalness={0.0} emissive="#e8dfd1" emissiveIntensity={0.08} />
+        <boxGeometry args={[0.2, 1.0, 0.2]} />
+        <meshStandardMaterial vertexColors color="#333" />
       </instancedMesh>
 
       <instancedMesh ref={tailMeshRef} args={[null, null, count]} castShadow receiveShadow frustumCulled={false}>
-        <boxGeometry args={[0.35, 0.35, 0.35]} />
-        <meshStandardMaterial vertexColors roughness={0.35} metalness={0.0} emissive="#fbeee1" emissiveIntensity={0.12} />
+        <sphereGeometry args={[0.25, 8, 8]} />
+        <meshStandardMaterial vertexColors color="#ffffff" emissive="#ffffff" emissiveIntensity={0.2} />
       </instancedMesh>
     </group>
   );

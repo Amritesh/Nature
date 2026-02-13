@@ -5,7 +5,6 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Terrain } from './Terrain'
 import { getTerrainHeight } from '../utils/terrain'
 import Herd from './Herd'
-import Sheep from './Sheep' // Import for debug sheep
 import Dog from './Dog'
 import Farm from './Farm'
 import Grassland from './Grassland'
@@ -219,16 +218,6 @@ export default function Experience() {
                        />
                    ))}
 
-                   {/* Debug Big Static Sheep */}
-                   <group position={[0, 10, 20]} scale={5}>
-                       <Sheep
-                           id={9999}
-                           position={[0, 0, 0]}
-                           velocity={[0,0,0]}
-                           flock={[]}
-                           dogs={[]}
-                       />
-                   </group>
 
                </group>
 
